@@ -298,6 +298,42 @@ textarea {
   font-size: 0.9rem;
 }
 
+.filter-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.filter-chip {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 7px;
+  border-color: var(--line);
+  background: #f8fafc;
+  color: var(--muted);
+  font-size: 0.84rem;
+  padding: 6px 9px;
+}
+
+.filter-chip.active {
+  border-color: var(--accent);
+  background: #edf4ff;
+  color: var(--accent);
+}
+
+.filter-chip strong {
+  min-width: 24px;
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--ink);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  text-align: center;
+  padding: 2px 6px;
+}
+
 .table-wrap {
   overflow-x: auto;
   border: 1px solid var(--line);
@@ -522,6 +558,20 @@ footer {
   .section-header {
     align-items: start;
     flex-direction: column;
+  }
+
+  .filter-strip,
+  .filter-chip {
+    width: 100%;
+  }
+
+  .filter-strip {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .filter-chip {
+    justify-content: space-between;
   }
 
   textarea {

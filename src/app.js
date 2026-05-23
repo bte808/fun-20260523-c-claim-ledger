@@ -11,11 +11,22 @@ const statusLine = document.querySelector("#status-line");
 const statsGrid = document.querySelector("#stats-grid");
 const ledgerBody = document.querySelector("#ledger-body");
 const mobileLedger = document.querySelector("#mobile-ledger");
+const filterStrip = document.querySelector("#filter-strip");
 const evidenceList = document.querySelector("#evidence-list");
 const exportOutput = document.querySelector("#export-output");
 const barSegments = document.querySelector("#bar-segments");
 
 let currentMarkdown = "";
+let currentAnalysis = null;
+let activeFilter = "all";
+
+const filterOptions = [
+  ["all", "All"],
+  ["needs-source", "Needs source"],
+  ["candidate", "Candidate"],
+  ["linked", "Linked"],
+  ["context", "Context"]
+];
 
 function loadSample() {
   draftInput.value = sampleDraft;
@@ -32,18 +43,33 @@ function clearAll() {
 
 function runAnalysis() {
   const analysis = analyzeLedger(draftInput.value, evidenceInput.value);
+  currentAnalysis = analysis;
   currentMarkdown = exportMarkdown(analysis);
   renderSummary(analysis);
+  renderFilters(analysis);
   renderLedger(analysis);
   renderEvidence(analysis);
   exportOutput.value = currentMarkdown;
   const hasClaims = analysis.summary.total > 0;
   copyButton.disabled = !hasClaims;
   downloadButton.disabled = !hasClaims;
+  updateStatusLine(analysis);
+}
+
+function updateStatusLine(analysis) {
+  const hasClaims = analysis.summary.total > 0;
+  if (!hasClaims) {
+    statusLine.textContent = "Paste a draft and evidence notes, or load the sample to start.";
+    return;
+  }
+
   const sourceCount = analysis.summary.counts["needs-source"];
-  statusLine.textContent = hasClaims
-    ? `${analysis.summary.total} claims reviewed. ${sourceCount} ${sourceCount === 1 ? "claim needs" : "claims need"} a source before reuse.`
-    : "Paste a draft and evidence notes, or load the sample to start.";
+  const filterLabel = filterOptions.find(([key]) => key === activeFilter)?.[1] || "Filtered";
+  const rows = getFilteredRows(analysis);
+  const filterPrefix = activeFilter === "all" ? "" : `${rows.length} ${filterLabel.toLowerCase()} ${rows.length === 1 ? "claim" : "claims"} shown. `;
+  statusLine.textContent = `${filterPrefix}${analysis.summary.total} claims reviewed. ${sourceCount} ${
+    sourceCount === 1 ? "claim needs" : "claims need"
+  } a source before reuse.`;
 }
 
 function renderSummary(analysis) {
@@ -84,13 +110,15 @@ function renderSummary(analysis) {
 }
 
 function renderLedger(analysis) {
-  if (!analysis.rows.length) {
-    ledgerBody.innerHTML = `<tr><td colspan="5" class="empty">No claims yet.</td></tr>`;
-    mobileLedger.innerHTML = `<p class="empty">No claims yet.</p>`;
+  const rows = getFilteredRows(analysis);
+  if (!rows.length) {
+    const emptyText = analysis.rows.length ? "No claims match this filter." : "No claims yet.";
+    ledgerBody.innerHTML = `<tr><td colspan="5" class="empty">${emptyText}</td></tr>`;
+    mobileLedger.innerHTML = `<p class="empty">${emptyText}</p>`;
     return;
   }
 
-  ledgerBody.innerHTML = analysis.rows
+  ledgerBody.innerHTML = rows
     .map(
       (row) => `
         <tr>
@@ -104,7 +132,7 @@ function renderLedger(analysis) {
     )
     .join("");
 
-  mobileLedger.innerHTML = analysis.rows
+  mobileLedger.innerHTML = rows
     .map(
       (row) => `
         <article class="claim-card">
@@ -119,6 +147,33 @@ function renderLedger(analysis) {
       `
     )
     .join("");
+}
+
+function renderFilters(analysis) {
+  const countFor = (key) => (key === "all" ? analysis.summary.total : analysis.summary.counts[key] || 0);
+  filterStrip.innerHTML = filterOptions
+    .map(([key, label]) => {
+      const active = key === activeFilter;
+      return `
+        <button
+          type="button"
+          class="filter-chip ${active ? "active" : ""}"
+          data-filter="${key}"
+          aria-pressed="${active}"
+        >
+          <span>${label}</span>
+          <strong>${countFor(key)}</strong>
+        </button>
+      `;
+    })
+    .join("");
+}
+
+function getFilteredRows(analysis) {
+  if (activeFilter === "all") {
+    return analysis.rows;
+  }
+  return analysis.rows.filter((row) => row.status.key === activeFilter);
 }
 
 function renderEvidenceBadges(row) {
@@ -192,5 +247,15 @@ copyButton.addEventListener("click", copyMarkdown);
 downloadButton.addEventListener("click", downloadMarkdown);
 draftInput.addEventListener("input", runAnalysis);
 evidenceInput.addEventListener("input", runAnalysis);
+filterStrip.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-filter]");
+  if (!button || !currentAnalysis) {
+    return;
+  }
+  activeFilter = button.dataset.filter;
+  renderFilters(currentAnalysis);
+  renderLedger(currentAnalysis);
+  updateStatusLine(currentAnalysis);
+});
 
 loadSample();

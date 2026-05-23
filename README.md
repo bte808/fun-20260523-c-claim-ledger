@@ -11,6 +11,7 @@ It is built for one narrow job: make unsupported claims visible before they beco
 - Detect explicit evidence links like `[E1]`.
 - Suggest candidate evidence when a claim and evidence note share key wording.
 - Flag strong claims that have no visible support.
+- Filter the review ledger by linked, candidate, needs-source, or context rows.
 - Export a Markdown table for a paper checklist, lab notebook, study guide, or reviewer comment.
 
 ## Good Study And Research Use Cases
