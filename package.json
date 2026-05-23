@@ -1,0 +1,20 @@
+{
+  "name": "fun-20260523-c-claim-ledger",
+  "version": "1.0.0",
+  "description": "Local academic writing helper that turns draft claims and evidence snippets into a reviewable claim ledger.",
+  "type": "module",
+  "private": false,
+  "scripts": {
+    "start": "python3 -m http.server 5176 --bind localhost",
+    "check": "node --check src/logic.js && node --check src/app.js && node scripts/smoke-test.mjs",
+    "test": "node scripts/smoke-test.mjs"
+  },
+  "keywords": [
+    "academic-writing",
+    "study-tool",
+    "evidence",
+    "research-notes",
+    "static-site"
+  ],
+  "license": "MIT"
+}

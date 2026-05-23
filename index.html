@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Claim Ledger Lite</title>
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Academic tool · local first · no generated citations</p>
+          <h1>Claim Ledger Lite</h1>
+          <p>
+            Turn a rough study note, paper paragraph, or lab reflection into a claim-by-claim evidence
+            checklist before it becomes polished but unsupported prose.
+          </p>
+        </div>
+        <div class="hero-actions" aria-label="Primary actions">
+          <button class="primary" id="analyze-button" type="button">Analyze</button>
+          <button id="sample-button" type="button">Load sample</button>
+        </div>
+      </header>
+
+      <section class="workspace" aria-label="Claim ledger workspace">
+        <aside class="input-panel">
+          <div class="field">
+            <label for="draft-input">Draft claims or study notes</label>
+            <span class="hint">Paste paragraph-style notes. Source IDs such as [E1] are detected.</span>
+            <textarea id="draft-input" spellcheck="true"></textarea>
+          </div>
+
+          <div class="field">
+            <label for="evidence-input">Evidence records</label>
+            <span class="hint">Use one per line: E1 | label | excerpt. Example content must stay labeled.</span>
+            <textarea id="evidence-input" spellcheck="true"></textarea>
+          </div>
+
+          <div class="toolbar">
+            <button class="primary" id="analyze-button-side" type="button" onclick="document.querySelector('#analyze-button').click()">Analyze</button>
+            <button id="clear-button" type="button">Clear</button>
+          </div>
+          <p class="status-line" id="status-line" aria-live="polite"></p>
+        </aside>
+
+        <section class="output-panel">
+          <div class="summary-band">
+            <div class="stats-grid" id="stats-grid"></div>
+            <div class="bar-wrap" aria-label="Claim support balance">
+              <div class="bar-labels">
+                <span><i class="dot good"></i>Linked</span>
+                <span><i class="dot watch"></i>Candidate</span>
+                <span><i class="dot risk"></i>Needs source</span>
+                <span><i class="dot quiet"></i>Context</span>
+              </div>
+              <div class="bar-segments" id="bar-segments"></div>
+            </div>
+          </div>
+
+          <div class="ledger-section">
+            <div class="section-header">
+              <div>
+                <h2>Claim review</h2>
+                <p>Each row is a revision checkpoint, not a truth judgment.</p>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Status</th>
+                    <th>Claim</th>
+                    <th>Evidence</th>
+                    <th>Next revision</th>
+                  </tr>
+                </thead>
+                <tbody id="ledger-body"></tbody>
+              </table>
+            </div>
+            <div class="mobile-ledger" id="mobile-ledger"></div>
+          </div>
+
+          <div class="evidence-section">
+            <div class="section-header">
+              <div>
+                <h2>Evidence notes</h2>
+                <p>Dashed records are available but not explicitly cited yet.</p>
+              </div>
+            </div>
+            <div class="evidence-list" id="evidence-list"></div>
+          </div>
+        </section>
+      </section>
+
+      <section class="export-panel">
+        <div class="section-header">
+          <div>
+            <h2>Markdown export</h2>
+            <p>Copy the ledger into a paper checklist, lab notebook, or review issue.</p>
+          </div>
+          <div class="toolbar">
+            <button id="copy-button" type="button">Copy Markdown</button>
+            <button id="download-button" type="button">Download .md</button>
+          </div>
+        </div>
+        <textarea id="export-output" readonly aria-label="Markdown export"></textarea>
+      </section>
+
+      <footer>
+        Built for local academic review. It does not fetch papers, verify facts, or invent citations.
+      </footer>
+    </main>
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>
