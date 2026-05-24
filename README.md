@@ -92,6 +92,10 @@ npm run check
 
 The check runs syntax validation for the browser modules and a Node smoke test for claim parsing, evidence linking, status counts, and Markdown export.
 
+## License
+
+MIT
+
 ## Later Extensions
 
 - Import/export JSON sessions.
