@@ -11,6 +11,7 @@ It is built for one narrow job: make unsupported claims visible before they beco
 - Detect explicit evidence links like `[E1]`.
 - Suggest candidate evidence when a claim and evidence note share key wording.
 - Flag strong claims that have no visible support.
+- Surface review warnings for duplicate IDs, thin excerpts, placeholder evidence, and over-strong claims.
 - Filter the review ledger by linked, candidate, needs-source, or context rows.
 - Export a Markdown table for a paper checklist, lab notebook, study guide, or reviewer comment.
 
@@ -75,7 +76,8 @@ There are no runtime dependencies. `npm install` only creates a normal npm proje
 2. Paste evidence notes, one per line.
 3. Use bracket IDs such as `[E1]` in the draft when a claim has support.
 4. Read the Claim Review table.
-5. Copy or download the Markdown export.
+5. Review any warning badges before reusing a claim.
+6. Copy or download the Markdown export.
 
 Evidence format:
 

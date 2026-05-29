@@ -72,6 +72,12 @@ const stopWords = new Set([
 const strongClaimPattern =
   /\b(always|argues|better|causes|compared|conclude|demonstrates|effective|forces|higher|improves|increases|indicates|less|lower|must|never|proves|reduces|significant|shows|suggest|suggests|therefore|worse)\b|\b\d+(?:\.\d+)?\s?(?:%|x|times)?\b/i;
 
+const universalClaimPattern = /\b(all|always|every|guarantee|never|no one|none)\b/i;
+const lowConfidencePattern =
+  /\b(example|illustrative|informal|limited|limitation|may|might|pilot|preliminary|sample|small|suggests?|synthetic|tends to|unclear|uncertain)\b/i;
+const placeholderEvidencePattern =
+  /\b(demo|example|illustrative|not a real citation|placeholder|sample|synthetic)\b/i;
+
 export function normalizeTokens(text) {
   return Array.from(
     new Set(
@@ -100,7 +106,7 @@ export function splitClaims(draft) {
 }
 
 export function parseEvidence(input) {
-  return String(input)
+  const evidence = String(input)
     .replace(/\r/g, "")
     .split(/\n+/)
     .map((line) => line.trim())
@@ -108,19 +114,38 @@ export function parseEvidence(input) {
     .map((line, index) => {
       const pipeParts = line.split("|").map((part) => part.trim());
       if (pipeParts.length >= 3) {
-        return makeEvidence(pipeParts[0], pipeParts[1], pipeParts.slice(2).join(" | "), index);
+        return makeEvidence(pipeParts[0], pipeParts[1], pipeParts.slice(2).join(" | "), index, {
+          labelWasBlank: !pipeParts[1],
+          textWasBlank: !pipeParts.slice(2).join(" | ").trim()
+        });
       }
 
       const keyed = line.match(/^([A-Za-z][A-Za-z0-9_-]{0,12}|\d{1,3})\s*[:\-]\s*(.+)$/);
       if (keyed) {
-        return makeEvidence(keyed[1], `Evidence ${keyed[1]}`, keyed[2], index);
+        return makeEvidence(keyed[1], `Evidence ${keyed[1]}`, keyed[2], index, {
+          inferredLabel: true,
+          textWasBlank: !String(keyed[2] || "").trim()
+        });
       }
 
-      return makeEvidence(`E${index + 1}`, `Evidence ${index + 1}`, line, index);
+      return makeEvidence(`E${index + 1}`, `Evidence ${index + 1}`, line, index, {
+        inferredId: true,
+        inferredLabel: true
+      });
     });
+
+  const idCounts = evidence.reduce((acc, item) => {
+    acc.set(item.id, (acc.get(item.id) || 0) + 1);
+    return acc;
+  }, new Map());
+
+  return evidence.map((item) => ({
+    ...item,
+    qualityFlags: collectEvidenceFlags(item, idCounts.get(item.id) > 1)
+  }));
 }
 
-function makeEvidence(rawId, rawLabel, rawText, index) {
+function makeEvidence(rawId, rawLabel, rawText, index, metadata = {}) {
   const id = sanitizeId(rawId || `E${index + 1}`);
   const label = String(rawLabel || `Evidence ${id}`).slice(0, 80);
   const text = String(rawText || "").trim();
@@ -128,6 +153,10 @@ function makeEvidence(rawId, rawLabel, rawText, index) {
     id,
     label,
     text,
+    inferredId: Boolean(metadata.inferredId),
+    inferredLabel: Boolean(metadata.inferredLabel),
+    labelWasBlank: Boolean(metadata.labelWasBlank),
+    textWasBlank: Boolean(metadata.textWasBlank),
     tokens: normalizeTokens(`${label} ${text}`)
   };
 }
@@ -179,13 +208,17 @@ export function analyzeLedger(draft, evidenceInput) {
       .sort((a, b) => b.score - a.score)
       .slice(0, 3);
 
+    const linkedEvidence = evidence.filter((item) => mentionedEvidenceIds.includes(item.id));
+    const diagnostics = makeRowDiagnostics(claim, linkedEvidence, scored);
+
     return {
       ...claim,
       tokens: claimTokens,
       mentionedEvidenceIds,
       suggestedEvidence: scored,
+      diagnostics,
       status: decideStatus(claim, mentionedEvidenceIds, scored),
-      prompt: makePrompt(claim, mentionedEvidenceIds, scored)
+      prompt: makePrompt(claim, mentionedEvidenceIds, scored, diagnostics)
     };
   });
 
@@ -251,12 +284,27 @@ function summarizeRows(rows, evidence) {
 
   const usedIds = new Set(rows.flatMap((row) => row.mentionedEvidenceIds));
   const unusedEvidence = evidence.filter((item) => !usedIds.has(item.id));
+  const evidenceWarnings = evidence
+    .filter((item) => item.qualityFlags.length > 0)
+    .map((item) => ({
+      id: item.id,
+      labels: item.qualityFlags.map((flag) => flag.label)
+    }));
+  const rowWarnings = rows
+    .filter((row) => row.diagnostics.length > 0)
+    .map((row) => ({
+      id: row.id,
+      messages: row.diagnostics.map((diagnostic) => diagnostic.message)
+    }));
   const riskScore = total ? Math.round(((counts["needs-source"] + counts.candidate * 0.5) / total) * 100) : 0;
 
   return {
     total,
     counts,
     evidenceCount: evidence.length,
+    evidenceWarnings,
+    warningCount: evidenceWarnings.length + rowWarnings.length,
+    rowWarnings,
     unusedEvidence,
     riskScore
   };
@@ -276,12 +324,38 @@ export function exportMarkdown(analysis) {
     `- Candidate matches: ${analysis.summary.counts.candidate}`,
     `- Needs source: ${analysis.summary.counts["needs-source"]}`,
     `- Context only: ${analysis.summary.counts.context}`,
+    `- Risk score: ${analysis.summary.riskScore}%`,
+    `- Evidence warnings: ${analysis.summary.evidenceWarnings.length}`,
+    `- Claim cautions: ${analysis.summary.rowWarnings.length}`,
+    `- Unused evidence: ${analysis.summary.unusedEvidence.length}`,
+    "",
+    "## Review Warnings",
+    "",
+  ];
+
+  if (!analysis.summary.warningCount && !analysis.summary.unusedEvidence.length) {
+    lines.push("- None.");
+  } else {
+    analysis.summary.evidenceWarnings.forEach((item) => {
+      lines.push(`- Evidence ${item.id}: ${item.labels.join("; ")}.`);
+    });
+    analysis.summary.rowWarnings.forEach((item) => {
+      lines.push(`- Claim ${item.id}: ${item.messages.join(" ")}`);
+    });
+    if (analysis.summary.unusedEvidence.length) {
+      lines.push(
+        `- Unused evidence records: ${analysis.summary.unusedEvidence.map((item) => item.id).join(", ")}.`
+      );
+    }
+  }
+
+  lines.push(
     "",
     "## Claim Review",
     "",
     "| ID | Status | Claim | Evidence | Revision prompt |",
     "| --- | --- | --- | --- | --- |"
-  ];
+  );
 
   analysis.rows.forEach((row) => {
     const evidenceIds =
@@ -303,4 +377,75 @@ export function exportMarkdown(analysis) {
 
 function escapeTable(value) {
   return String(value).replace(/\|/g, "\\|").replace(/\n/g, " ");
+}
+
+function collectEvidenceFlags(item, hasDuplicateId) {
+  const flags = [];
+  const fullText = `${item.label} ${item.text}`.trim();
+
+  if (hasDuplicateId) {
+    flags.push({
+      key: "duplicate-id",
+      label: "Duplicate ID; multiple evidence records share this identifier"
+    });
+  }
+  if (item.labelWasBlank || item.inferredLabel) {
+    flags.push({
+      key: "missing-label",
+      label: "Label missing or inferred; add a specific source label"
+    });
+  }
+  if (item.textWasBlank || !item.text) {
+    flags.push({
+      key: "missing-text",
+      label: "Excerpt missing; add the supporting detail"
+    });
+  } else if (item.text.length < 32 || item.tokens.length < 4) {
+    flags.push({
+      key: "low-detail",
+      label: "Excerpt is brief; confirm it captures enough detail to support a claim"
+    });
+  }
+  if (placeholderEvidencePattern.test(fullText)) {
+    flags.push({
+      key: "placeholder",
+      label: "Looks like sample or placeholder evidence, not a reusable citation"
+    });
+  }
+  if (lowConfidencePattern.test(item.text)) {
+    flags.push({
+      key: "low-confidence",
+      label: "Contains limited or tentative wording; avoid overstating support"
+    });
+  }
+
+  return flags;
+}
+
+function makeRowDiagnostics(claim, linkedEvidence, suggestedEvidence) {
+  const diagnostics = [];
+  const linkedFlags = linkedEvidence.flatMap((item) => item.qualityFlags);
+  const hasLowConfidenceEvidence = linkedFlags.some((flag) => flag.key === "low-confidence");
+  const hasPlaceholderEvidence = linkedFlags.some((flag) => flag.key === "placeholder");
+
+  if (claim.strong && linkedEvidence.length && (hasLowConfidenceEvidence || hasPlaceholderEvidence)) {
+    diagnostics.push({
+      key: "linked-evidence-caution",
+      message: "Linked evidence is tentative, limited, or sample-like."
+    });
+  }
+  if (universalClaimPattern.test(claim.text) && linkedEvidence.length && hasLowConfidenceEvidence) {
+    diagnostics.push({
+      key: "overclaim-risk",
+      message: "The claim sounds universal, but the linked evidence reads limited or example-based."
+    });
+  }
+  if (!linkedEvidence.length && suggestedEvidence.some((item) => item.qualityFlags.some((flag) => flag.key === "placeholder"))) {
+    diagnostics.push({
+      key: "candidate-placeholder",
+      message: "The closest matching evidence also looks sample-like, so treat it as a prompt to find a stronger source."
+    });
+  }
+
+  return diagnostics;
 }

@@ -1,4 +1,4 @@
-import { analyzeLedger, exportMarkdown, sampleDraft, sampleEvidence } from "../src/logic.js";
+import { analyzeLedger, exportMarkdown, parseEvidence, sampleDraft, sampleEvidence } from "../src/logic.js";
 
 function assert(condition, message) {
   if (!condition) {
@@ -18,6 +18,7 @@ assert(analysis.rows.some((row) => row.suggestedEvidence.length > 0), "sample sh
 const markdown = exportMarkdown(analysis);
 assert(markdown.includes("# Claim Ledger"), "export should include a title");
 assert(markdown.includes("Generated locally"), "export should include the local-review warning");
+assert(markdown.includes("## Review Warnings"), "export should include a review warnings section");
 assert(markdown.includes("| ID | Status | Claim | Evidence | Revision prompt |"), "export should include ledger table");
 
 const custom = analyzeLedger(
@@ -27,5 +28,16 @@ const custom = analyzeLedger(
 
 assert(custom.summary.counts.linked === 1, "custom citation should link to S1");
 assert(custom.summary.counts["needs-source"] === 1, "universal unsupported claim should need a source");
+assert(custom.summary.rowWarnings.length >= 1, "limited linked evidence should surface a claim caution");
+assert(custom.rows[0].diagnostics.length >= 1, "linked strong claim should include at least one diagnostic");
 
-console.log("Smoke tests passed: claim parsing, evidence linking, status counts, and Markdown export.");
+const parsedEvidence = parseEvidence(
+  "E1 | | Brief note\nE1 | Duplicate source | Synthetic example note, not a real citation."
+);
+
+assert(parsedEvidence[0].qualityFlags.some((flag) => flag.key === "missing-label"), "blank labels should be flagged");
+assert(parsedEvidence[0].qualityFlags.some((flag) => flag.key === "low-detail"), "brief excerpts should be flagged");
+assert(parsedEvidence.every((item) => item.qualityFlags.some((flag) => flag.key === "duplicate-id")), "duplicate IDs should be flagged");
+assert(parsedEvidence[1].qualityFlags.some((flag) => flag.key === "placeholder"), "sample-like evidence should be flagged");
+
+console.log("Smoke tests passed: claim parsing, evidence linking, warning flags, status counts, and Markdown export.");

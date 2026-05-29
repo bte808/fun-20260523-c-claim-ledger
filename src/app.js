@@ -29,12 +29,14 @@ const filterOptions = [
 ];
 
 function loadSample() {
+  activeFilter = "all";
   draftInput.value = sampleDraft;
   evidenceInput.value = sampleEvidence;
   runAnalysis();
 }
 
 function clearAll() {
+  activeFilter = "all";
   draftInput.value = "";
   evidenceInput.value = "";
   runAnalysis();
@@ -64,12 +66,17 @@ function updateStatusLine(analysis) {
   }
 
   const sourceCount = analysis.summary.counts["needs-source"];
+  const warningSuffix = analysis.summary.warningCount
+    ? ` ${analysis.summary.warningCount} evidence or claim caution${
+        analysis.summary.warningCount === 1 ? "" : "s"
+      } need review.`
+    : "";
   const filterLabel = filterOptions.find(([key]) => key === activeFilter)?.[1] || "Filtered";
   const rows = getFilteredRows(analysis);
   const filterPrefix = activeFilter === "all" ? "" : `${rows.length} ${filterLabel.toLowerCase()} ${rows.length === 1 ? "claim" : "claims"} shown. `;
   statusLine.textContent = `${filterPrefix}${analysis.summary.total} claims reviewed. ${sourceCount} ${
     sourceCount === 1 ? "claim needs" : "claims need"
-  } a source before reuse.`;
+  } a source before reuse.${warningSuffix}`;
 }
 
 function renderSummary(analysis) {
@@ -79,6 +86,7 @@ function renderSummary(analysis) {
     ["Evidence", evidenceCount, "Source notes available in the ledger."],
     ["Linked", counts.linked, "Claims that explicitly cite a record."],
     ["Needs source", counts["needs-source"], "Strong claims without a visible source link."],
+    ["Warnings", analysis.summary.warningCount, "Evidence or claim cautions that need review."],
     ["Risk score", `${riskScore}%`, "Higher means more claims need source review."]
   ];
 
@@ -126,7 +134,7 @@ function renderLedger(analysis) {
           <td><span class="pill ${row.status.tone}">${row.status.label}</span></td>
           <td>${escapeHtml(row.text)}</td>
           <td>${renderEvidenceBadges(row)}</td>
-          <td>${escapeHtml(row.prompt)}</td>
+          <td>${renderPromptCell(row)}</td>
         </tr>
       `
     )
@@ -142,6 +150,7 @@ function renderLedger(analysis) {
           </div>
           <p>${escapeHtml(row.text)}</p>
           <div class="badge-row">${renderEvidenceBadges(row)}</div>
+          ${renderRowDiagnostics(row)}
           <small>${escapeHtml(row.prompt)}</small>
         </article>
       `
@@ -201,6 +210,7 @@ function renderEvidence(analysis) {
             <span>${escapeHtml(item.label)}</span>
           </div>
           <p>${escapeHtml(item.text)}</p>
+          ${renderEvidenceFlags(item)}
         </article>
       `
     )
@@ -240,6 +250,38 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
+function renderPromptCell(row) {
+  return `${renderRowDiagnostics(row)}<div>${escapeHtml(row.prompt)}</div>`;
+}
+
+function renderRowDiagnostics(row) {
+  if (!row.diagnostics.length) {
+    return "";
+  }
+
+  return `
+    <div class="note-list">
+      ${row.diagnostics
+        .map((diagnostic) => `<p class="row-note">${escapeHtml(diagnostic.message)}</p>`)
+        .join("")}
+    </div>
+  `;
+}
+
+function renderEvidenceFlags(item) {
+  if (!item.qualityFlags.length) {
+    return "";
+  }
+
+  return `
+    <div class="mini-badges">
+      ${item.qualityFlags
+        .map((flag) => `<span class="quality-badge">${escapeHtml(flag.label)}</span>`)
+        .join("")}
+    </div>
+  `;
+}
+
 analyzeButton.addEventListener("click", runAnalysis);
 sampleButton.addEventListener("click", loadSample);
 clearButton.addEventListener("click", clearAll);
@@ -258,4 +300,12 @@ filterStrip.addEventListener("click", (event) => {
   updateStatusLine(currentAnalysis);
 });
 
-loadSample();
+initializeApp();
+
+function initializeApp() {
+  if (draftInput.value.trim() || evidenceInput.value.trim()) {
+    runAnalysis();
+    return;
+  }
+  loadSample();
+}
